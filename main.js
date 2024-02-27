@@ -9,16 +9,44 @@
 })(this, function (Swal) {
     // alert('脚本运行中...');
 
-    // 错误信息输出机制
+    // 关于脚本的基本信息
+    let baseInfo = {
+        scriptName: 'SeaYJ Tools',
+        author: 'SeaYJ',
+        blogLink: 'https://www.seayj.cn',
+        githubLink: 'https://github.com/SeaYJ/SeaYJTools',
+        githubIssuesLink: 'https://github.com/SeaYJ/SeaYJTools/issues',
+    };
+
+    // 错误信息输出机制(面向程序员)
     let ERROR = {
-        ERROR_FLAG: "[SEAYJ TOOLS ERROR]:",
+        ERROR_FLAG: "[" + baseInfo.scriptName.toUpperCase() + " ERROR]:",
         ERROR_MAIN: "",// 仅需要提供此处信息即可
         ERROR_AUXILIARY_INFO: "Please provide this information to the script developer for addressing your issue.",
-        ERROR_FEEDBACK: "https://www.seayj.cn/",
+        ERROR_FEEDBACK: baseInfo.githubIssuesLink,
         CLOG_ERROR_INFO: () => {
             console.error(ERROR.ERROR_FLAG + ERROR.ERROR_MAIN + "\n" + ERROR.ERROR_AUXILIARY_INFO + "\n" + ERROR.ERROR_FEEDBACK);
         }
     };
+
+    // 错误提示 DIALOG
+    let ERROR_DIALOG = Swal.mixin({
+        icon: 'error',
+        title: '好像出了点小问题哦~',
+        showConfirmButton: true,
+        confirmButtonText: '反馈',
+        showCancelButton: true,
+        cancelButtonText: '退出'
+    });
+
+    // 成功提示 DIALOG
+    let SUCCESS_DIALOG = Swal.mixin({
+        icon: "success",
+        timer: 2000,                // 自动关闭倒计时（毫秒）
+        timerProgressBar: true,     // 倒计时进度条
+        confirmButtonText: '好的'
+    });
+
 
     //////
     /// B站相关的扩展功能实现
@@ -49,12 +77,15 @@
             '生活不是等待风暴过去，而是学会在雨中翩翩起舞。'
         ],
         API: {
-            videoInfo: "https://api.bilibili.com/x/web-interface/view"
+            videoInfo: "https://api.bilibili.com/x/web-interface/view",
+            videoStream: "https://api.bilibili.com/x/player/playurl"
         },
         aidRegex: /[Aa][Vv][0-9]+/g,
         bvidRegex: /[Bb][Vv][1-9A-HJ-NP-Za-km-z]{10}/g,
         aid: '',
-        bvid: ''
+        bvid: '',
+        pages: [],
+        durl: []
     };
 
     Bilibili.getRandomNumbers = function (min, max) {
@@ -82,18 +113,32 @@
     }
 
     Bilibili.videoCoverDownload = function () {
+
         // 重获取当前视频标识
         Bilibili.getVideoIdentifier();
 
-        let url = "";
+        let jsonUrl = "";
         if (Bilibili.bvid) {
-            url = Bilibili.API.videoInfo + "?bvid=" + Bilibili.bvid;
+            jsonUrl = Bilibili.API.videoInfo + "?bvid=" + Bilibili.bvid;
         } else if (Bilibili.aid) {
-            url = Bilibili.API.videoInfo + "?aid=" + Bilibili.aid;
+            jsonUrl = Bilibili.API.videoInfo + "?aid=" + Bilibili.aid;
+        } else {    // 未能正确获取视频唯一标识
+            ERROR.ERROR_MAIN = "Failed to obtain the unique identifier of the video (AV or BV).";
+            ERROR.CLOG_ERROR_INFO();
+
+            ERROR_DIALOG.fire({
+                text: "未能正确获取视频唯一标识(AV or BV)，请重新尝试！"
+            }).then((clickResult) => {
+                if (clickResult.isConfirmed) {
+                    window.open(baseInfo.githubIssuesLink);
+                }
+            });
+
+            return;
         }
 
-        // 使用 fetch 发起 GET 请求
-        fetch(url)
+        // 使用 fetch 发起 GET 请求，获取视频基本信息的 json 数据
+        fetch(jsonUrl)
             .then(response => {
                 // 检查响应是否成功
                 if (!response.ok) {
@@ -112,45 +157,353 @@
                     showCancelButton: true,
                     confirmButtonText: "下载",
                     cancelButtonText: "取消",
-                    footer: '<a href="https://github.com/SeaYJ/SeaYJTools/issues" target="_blank">Encountered any difficulties? Please tell me here.</a>',
+                    footer: '<a href="' + baseInfo.githubIssuesLink + '" target="_blank">Encountered any difficulties? Please tell me here.</a>',
                 }).then((result) => {
                     if (result.isConfirmed) {
-                        // 通过 Fetch API 创建 Blob 对象下载图片
-                        fetch(url)
-                            .then(response => { // 检查网络问题
-                                if (!response.ok) {
-                                    throw new Error('Network response was not ok');
-                                }
-                                return response.blob();
-                            })
-                            .then(blob => {     // 下载图片
-                                const url = window.URL.createObjectURL(blob);
-                                const link = document.createElement('a');
-                                link.href = url;                // 设置<a>元素的 href 属性为 Blob URL
-                                link.download = 'image.jpg';    // 设置<a>元素的 download 属性为要保存的文件名
-                                link.click();                   // 模拟点击<a>元素来触发下载
-                                window.URL.revokeObjectURL(url);// 释放 Blob URL 对象
-                                Swal.fire({                     // 提示下载成功
-                                    icon: "success",
-                                    title: "已保存",
-                                    timer: 1600,                // 自动关闭倒计时（毫秒）
-                                    timerProgressBar: true      // 倒计时进度条
-                                });
-                            })
-                            .catch(error => {
-                                ERROR.ERROR_MAIN = 'There was a problem with the fetch operation(Download failed):' + error;
-                                ERROR.CLOG_ERROR_INFO();
-                            });
-                    } else if (result.isDismissed) {
-                        // 取消了，不做操作
+                        downloadVideoCover(jsonUrl, data);
                     }
-                });;
+                });
             })
             .catch(error => {
                 // 处理错误
-                ERROR.ERROR_MAIN = 'There was a problem with your fetch operation:' + error;
+                ERROR.ERROR_MAIN = 'Request error:' + error;
                 ERROR.CLOG_ERROR_INFO();
+
+                ERROR_DIALOG.fire({
+                    html: "好像发生了点小意外，这是怎么了呢？<br>" + error
+                }).then((clickResult) => {
+                    if (clickResult.isConfirmed) {
+                        window.open(baseInfo.githubIssuesLink);
+                    }
+                });
             });
+
+
+        function downloadVideoCover(url, jsonData) {
+            // 通过 Fetch API 创建 Blob 对象下载图片
+            fetch(url)
+                .then(response => { // 检查网络问题
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok.');
+                    }
+                    return response.blob();
+                })
+                .then(blob => {     // 下载图片
+                    const url = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;                // 设置<a>元素的 href 属性为 Blob URL
+                    // 生成文件扩展名
+                    // 使用 || [] 确保 match 方法未找到匹配时返回一个空数组，避免 match 返回 null 导致的错误。
+                    // 使用 [0] 获取数组的第一个元素，如果 match 方法未找到匹配，则返回 undefined。
+                    // 最后使用 || ".jpg" 设置默认值，确保即使 match 方法未找到匹配，也能得到默认的后缀名。
+                    let fileExt = (jsonData.data.pic.match(/\.(png|pjp|jpg|pjpeg|jfif)\b/gi) || [])[0] || ".jpg";
+                    // 生成文件唯一标识（时间戳）
+                    let fileUniqueIdentifier = new Date().getTime();
+                    link.download = baseInfo.scriptName + '_' + fileUniqueIdentifier + fileExt;    // 设置<a>元素的 download 属性为要保存的文件名
+                    link.click();                   // 模拟点击<a>元素来触发下载
+                    window.URL.revokeObjectURL(url);// 释放 Blob URL 对象
+
+                    SUCCESS_DIALOG.fire({           // 提示下载成功
+                        title: "已保存"
+                    });
+                })
+                .catch(error => {
+                    ERROR.ERROR_MAIN = 'Download cover failed:' + error;
+                    ERROR.CLOG_ERROR_INFO();
+
+                    ERROR_DIALOG.fire({
+                        html: "[<strong>下载失败</strong>]好像发生了点小问题，请重新尝试！<br>" + error
+                    }).then((clickResult) => {
+                        if (clickResult.isConfirmed) {
+                            window.open(baseInfo.githubIssuesLink);
+                        }
+                    });
+                });
+        }
+    }
+
+    Bilibili.videoDownload = function () {
+        // 重获取当前视频标识
+        Bilibili.getVideoIdentifier();
+
+        let infoJsonUrl = "";
+        if (Bilibili.bvid) {
+            infoJsonUrl = Bilibili.API.videoInfo + "?bvid=" + Bilibili.bvid;
+        } else if (Bilibili.aid) {
+            infoJsonUrl = Bilibili.API.videoInfo + "?aid=" + Bilibili.aid;
+        } else {    // 未能正确获取视频唯一标识
+            ERROR.ERROR_MAIN = "Failed to obtain the unique identifier of the video (AV or BV).";
+            ERROR.CLOG_ERROR_INFO();
+
+            ERROR_DIALOG.fire({
+                text: "未能正确获取视频唯一标识(AV or BV)，请重新尝试！"
+            }).then((clickResult) => {
+                if (clickResult.isConfirmed) {
+                    window.open(baseInfo.githubIssuesLink);
+                }
+            });
+
+            return;
+        }
+
+        // 使用 fetch 发起 GET 请求，获取视频基本信息的 json 数据
+        fetch(infoJsonUrl)
+            .then(response => {
+                // 检查响应是否成功
+                if (!response.ok) {
+                    throw new Error('Network response was not ok!');
+                }
+                // 将响应转换为 JSON 格式
+                return response.json();
+            })
+            .then(async data => {
+                // 解析视频分页标识数据
+                Bilibili.pages = data.data.pages.concat([]);
+                const videoSelectList = new Map();
+                Bilibili.pages.forEach(page => {
+                    videoSelectList.set(page.cid, page.part);
+                });
+
+                // 弹出一个带有选择框的 SweetAlert2 弹窗，并将用户选择的值保存在变量 videoPage 中
+                const { value: videoPageCid } = await Swal.fire({
+                    title: "选择需要下载的视频",
+                    input: "select",
+                    inputOptions: videoSelectList,
+                    showConfirmButton: true,
+                    confirmButtonText: "选择",
+                    showCancelButton: true,
+                    cancelButtonText: "取消"
+                });
+                // 处理选择项
+                if (videoPageCid) {
+                    let streamJsonUrl = '';
+                    if (Bilibili.bvid) {
+                        streamJsonUrl = Bilibili.API.videoStream + "?bvid=" + Bilibili.bvid + "&cid=" + videoPageCid + "&fourk=1&fnval=0";
+                    } else if (Bilibili.aid) {
+                        streamJsonUrl = Bilibili.API.videoStream + "?aid=" + Bilibili.aid + "&cid=" + videoPageCid + "&fourk=1&fnval=0";
+                    } else {    // 未能正确获取视频唯一标识
+                        ERROR.ERROR_MAIN = "Failed to obtain the unique identifier of the video (AV or BV).";
+                        ERROR.CLOG_ERROR_INFO();
+
+                        ERROR_DIALOG.fire({
+                            text: "未能正确获取视频唯一标识(AV or BV)，请重新尝试！"
+                        }).then((clickResult) => {
+                            if (clickResult.isConfirmed) {
+                                window.open(baseInfo.githubIssuesLink);
+                            }
+                        });
+
+                        return;
+                    }
+
+                    fetch(streamJsonUrl)
+                        .then(response => {
+                            // 检查响应是否成功
+                            if (!response.ok) {
+                                throw new Error('Network response was not ok!');
+                            }
+                            // 将响应转换为 JSON 格式
+                            return response.json();
+                        })
+                        .then(async data => {
+                            // 解析视频清晰度数据
+                            Bilibili.durl = data.data.durl.concat([]);// 保存默认数据
+
+                            const videoPageQualitySelectList = new Map();
+                            for (let i = 0; i < data.data.accept_quality.length; i++) {
+                                videoPageQualitySelectList.set(data.data.accept_quality[i], data.data.accept_description[i]);
+                            }
+
+                            const { value: videoPageQuality } = await Swal.fire({
+                                title: "选择需要下载的视频",
+                                input: "select",
+                                inputOptions: videoPageQualitySelectList,
+                                showConfirmButton: true,
+                                confirmButtonText: "下载",
+                                showCancelButton: true,
+                                cancelButtonText: "取消"
+                            });
+
+                            if (videoPageQuality) {
+                                let streamQnJsonUrl = streamJsonUrl + "&qn=" + videoPageQuality
+
+                                fetch(streamQnJsonUrl)
+                                    .then(response => {
+                                        // 检查响应是否成功
+                                        if (!response.ok) {
+                                            throw new Error('Network response was not ok!');
+                                        }
+                                        // 将响应转换为 JSON 格式
+                                        return response.json();
+                                    })
+                                    .then(data => {
+                                        Bilibili.durl = data.data.durl.concat([]);// 更新数据
+
+                                        let videoDownloadUrl = data.data.durl[0].url;
+                                        let refererHeader = window.location.href;
+
+                                        downloadVideo(videoDownloadUrl, refererHeader);
+                                    })
+                                    .catch(error => {
+                                        // 处理错误
+                                        ERROR.ERROR_MAIN = 'Request error!' + error;
+                                        ERROR.CLOG_ERROR_INFO();
+
+                                        ERROR_DIALOG.fire({
+                                            html: "可恶！出现什么问题了呢？<br>" + error
+                                        }).then((clickResult) => {
+                                            if (clickResult.isConfirmed) {
+                                                window.open(baseInfo.githubIssuesLink);
+                                            }
+                                        });
+                                    });
+
+                            } else {// 未能获取视频质量编码
+                                ERROR.ERROR_MAIN = "Failed to obtain the video quality encoding(accept_quality).";
+                                ERROR.CLOG_ERROR_INFO();
+
+                                ERROR_DIALOG.fire({
+                                    text: "未能获取视频质量编码(accept_quality)，请重新尝试！"
+                                }).then((clickResult) => {
+                                    if (clickResult.isConfirmed) {
+                                        window.open(baseInfo.githubIssuesLink);
+                                    }
+                                });
+
+                                return;
+                            }
+                        })
+                        .catch(error => {
+                            // 处理错误
+                            ERROR.ERROR_MAIN = 'Request error!' + error;
+                            ERROR.CLOG_ERROR_INFO();
+
+                            ERROR_DIALOG.fire({
+                                html: "哎呀~怎么被绊倒了呢？<br>" + error
+                            }).then((clickResult) => {
+                                if (clickResult.isConfirmed) {
+                                    window.open(baseInfo.githubIssuesLink);
+                                }
+                            });
+                        });
+
+                } else {    // 未能获取视频分页标识
+                    ERROR.ERROR_MAIN = "Failed to obtain the video pagination identifier(CID).";
+                    ERROR.CLOG_ERROR_INFO();
+
+                    ERROR_DIALOG.fire({
+                        text: "未能获取视频分页标识(CID)，请重新尝试！"
+                    }).then((clickResult) => {
+                        if (clickResult.isConfirmed) {
+                            window.open(baseInfo.githubIssuesLink);
+                        }
+                    });
+
+                    return;
+                }
+            })
+            .catch(error => {
+                // 处理错误
+                ERROR.ERROR_MAIN = 'Request error!' + error;
+                ERROR.CLOG_ERROR_INFO();
+
+                ERROR_DIALOG.fire({
+                    html: "好像发生了点小意外，这是怎么了呢？<br>" + error
+                }).then((clickResult) => {
+                    if (clickResult.isConfirmed) {
+                        window.open(baseInfo.githubIssuesLink);
+                    }
+                });
+            });
+
+        function downloadVideo(videoDownloadUrl, refererHeader) {
+
+            // 初始化进度条
+            let progress = 0;
+            let videoDownloadToast = Swal.fire({
+                toast: true,
+                position: "bottom-start",
+                title: 'Downloading...',
+                html: '<div id="VideoDownloadProgressBar" style="width: 100%; height: 20px; background-color: #f1f1f1;">' +
+                    '<div id="VideoDownloadProgress" style="width: 0%; height: 100%; background-color: #4CAF50;"></div>' +
+                    '</div>',
+                timerProgressBar: true,
+                showConfirmButton: false,
+                willOpen: (toast) => {
+                    // 阻止 Toast 原本的点击关闭
+                    toast.onclick = null;
+
+                    // 这个方法会显示一个带有加载动画的模态框，
+                    // 并且阻止用户与页面上其他元素进行交互，
+                    // 直到加载完成或者调用 Swal.close() 方法关闭加载动画。
+                    // 这样可以提高用户体验，让用户知道有一些操作正在进行中。
+                    Swal.showLoading();
+
+                    // 开始下载视频
+                    fetch(videoDownloadUrl, {
+                        method: 'GET',
+                        headers: {
+                            'Referer': refererHeader
+                        }
+                    }).then(response => {
+                        // 检查网络问题
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok!');
+                        }
+
+                        // 获取文件大小
+                        const contentLength = parseInt(response.headers.get('content-length'));
+                        // 创建一个可读流
+                        const reader = response.body.getReader();
+                        let receivedLength = 0; // 接收到的数据长度
+                        let chunks = [];        // 存放接收到的数据
+                        function pump() {
+                            reader.read().then(({ done, value }) => {
+                                if (done) {
+                                    // 下载完成，保存视频
+                                    const blob = new Blob(chunks);
+                                    const url = URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    // 生成文件唯一标识（时间戳）
+                                    let fileUniqueIdentifier = new Date().getTime();
+                                    a.download = baseInfo.scriptName + '_' + fileUniqueIdentifier + '.mp4';
+                                    a.click();
+                                    URL.revokeObjectURL(url);
+
+                                    // 关闭此 Toast
+                                    Swal.close()
+                                    return;
+                                }
+                                // 更新接收到的数据长度
+                                receivedLength += value.length;
+                                // 将接收到的数据存入chunks数组
+                                chunks.push(value);
+                                // 计算下载进度
+                                const progress = (receivedLength / contentLength) * 100;
+                                console.log(`下载进度: ${progress}%`);
+                                document.getElementById('VideoDownloadProgress').style.width = progress + '%';
+
+                                pump();// 继续接收数据
+                            });
+                        }
+                        pump();// 启动下载泵
+
+                    }).catch(error => {
+                        ERROR.ERROR_MAIN = 'Download video failed!' + error;
+                        ERROR.CLOG_ERROR_INFO();
+
+                        ERROR_DIALOG.fire({
+                            html: "[<strong>下载失败</strong>]这真是一个奇怪的问题！<br>" + error
+                        }).then((clickResult) => {
+                            if (clickResult.isConfirmed) {
+                                window.open(baseInfo.githubIssuesLink);
+                            }
+                        });
+                    });
+                }
+            });
+        }
     }
 
     Bilibili.addVideoExtensionModuleBtn = function () {
@@ -163,6 +516,15 @@
                 const videoToolbarLeftMain = document.querySelector(Bilibili.videoExtensionModuleBtnContainer);
                 if (!videoToolbarLeftMain) {
                     ERROR.ERROR_MAIN = "'videoToolbarLeftMain' is null.";
+
+                    ERROR_DIALOG.fire({
+                        html: "哎呀~按钮好像没添加成功呢！<br>这是咋回事呢(´･ω･`)?"
+                    }).then((clickResult) => {
+                        if (clickResult.isConfirmed) {
+                            window.open(baseInfo.githubIssuesLink);
+                        }
+                    });
+
                     return ERROR.CLOG_ERROR_INFO();
                 }
 
@@ -193,9 +555,9 @@
                 const videoCoverIteamText = document.createElement("span");
                 videoCoverIteamText.classList.add("video-like-info");   // 这个样式直接与“点赞”按钮保持一致
                 videoCoverIteamText.classList.add("video-toolbar-item-text");
-                videoCoverIteamText.textContent = "封面";               // 实际显示文字
+                videoCoverIteamText.textContent = "下载封面";            // 实际显示文字
 
-                videoCoverIteam.addEventListener('click', Bilibili.videoCoverDownload);
+                videoCoverIteam.addEventListener('click', Bilibili.videoCoverDownload); // 绑定事件
 
                 // 创建“视频下载”按钮
                 const videoItemWrap = document.createElement("div");
@@ -210,7 +572,9 @@
                 const videoIteamText = document.createElement("span");
                 videoIteamText.classList.add("video-like-info");        // 这个样式直接与“点赞”按钮保持一致
                 videoIteamText.classList.add("video-toolbar-item-text");
-                videoIteamText.textContent = "视频";                    // 实际显示文字
+                videoIteamText.textContent = "下载视频";                 // 实际显示文字
+
+                videoIteam.addEventListener('click', Bilibili.videoDownload); // 绑定事件
 
                 // 组装元素
                 videoCoverIteam.innerHTML = Bilibili.videoCoverItemSvg;
@@ -230,7 +594,6 @@
     }
 
     Bilibili.addVideoExtensionModuleBtn(); // 初始调用
-
 
     // alert('脚本运行完毕！');
 });
