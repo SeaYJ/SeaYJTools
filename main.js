@@ -291,157 +291,12 @@
                     footer: '<a href="' + baseInfo.githubIssuesLink + '" target="_blank">遇到了问题？请在这里告诉我们！</a>'
                 })
 
-                if (isConfirmedToContinue) {
-                    // 处理选择项
-                    if (videoPageCid) {
+                // 只有选择后再进行下一步
+                if (!isConfirmedToContinue) { return; }
 
-                        // 通过视频标识组成“视频流（videoStream）”的请求连接 streamJsonUrl
-                        // 这个 streamJsonUrl 并未指定请求的视频质量（视频清晰度）
-                        // 即使用默认视频质量
-                        let streamJsonUrl = '';
-                        if (Bilibili.bvid) {
-                            streamJsonUrl = Bilibili.API.videoStream + "?bvid=" + Bilibili.bvid + "&cid=" + videoPageCid + "&fourk=1&fnval=1";  // 默认下载 MP4
-                        } else if (Bilibili.aid) {
-                            streamJsonUrl = Bilibili.API.videoStream + "?aid=" + Bilibili.aid + "&cid=" + videoPageCid + "&fourk=1&fnval=1";    // 默认下载 MP4
-                        } else {    // 未能正确获取视频唯一标识
-                            ERROR.ERROR_MAIN = "Failed to obtain the unique identifier of the video (AV or BV).";
-                            ERROR.CLOG_ERROR_INFO();
+                // 获取视频所有分 P 的 CID 信息
+                getVideoPageCid(videoPageCid);
 
-                            ERROR_DIALOG.fire({
-                                text: "未能正确获取视频唯一标识(AV or BV)，请重新尝试！"
-                            }).then((clickResult) => {
-                                if (clickResult.isConfirmed) {
-                                    window.open(baseInfo.githubIssuesLink);
-                                }
-                            });
-
-                            return;
-                        }
-
-                        // 使用 fetch 发起 GET 请求，获取“视频流”的 json 数据
-                        // 这里请求的“视频流”下载地址是默认视频质量（视频清晰度）
-                        fetch(streamJsonUrl)
-                            .then(response => {
-                                // 检查响应是否成功
-                                if (!response.ok) {
-                                    throw new Error('Network response was not ok!');
-                                }
-                                // 将响应转换为 JSON 格式
-                                return response.json();
-                            })
-                            .then(async data => {
-                                // 解析视频清晰度数据
-                                Bilibili.durl = data.data.durl.concat([]);// 保存默认数据
-
-                                const videoPageQualitySelectList = new Map();
-                                for (let i = 0; i < data.data.accept_quality.length; i++) {
-                                    videoPageQualitySelectList.set(data.data.accept_quality[i], data.data.accept_description[i]);
-                                }
-
-                                // 选择需要下载的清晰度
-                                const { value: videoPageQuality, isConfirmed: isConfirmedToContinue } = await Swal.fire({
-                                    title: "选择需要下载的清晰度",
-                                    html: "<strong>提示：</strong>视频网站的 1080P 有时候并非真实的 1080P，<br>" +
-                                        "而是通过技术手段处理后的播放效果。<br>" +
-                                        "这里是直接请求 B 站自己提供的清晰度分类信息，<br>" +
-                                        "所以按照最高画质下载即可。",
-                                    input: "select",
-                                    inputOptions: videoPageQualitySelectList,
-                                    showConfirmButton: true,
-                                    confirmButtonText: "下载",
-                                    showCancelButton: true,
-                                    cancelButtonText: "取消",
-                                    allowOutsideClick: false,
-                                    footer: '<a href="' + baseInfo.githubIssuesLink + '" target="_blank">遇到了问题？请在这里告诉我们！</a>'
-                                });
-
-                                if (isConfirmedToContinue) {
-                                    // 请求对应视频的视频质量信息
-                                    if (videoPageQuality) {
-                                        let streamQnJsonUrl = streamJsonUrl + "&qn=" + videoPageQuality
-
-                                        // 使用 fetch 发起 GET 请求，获取“视频流”的 json 数据
-                                        // 这里请求的“视频流”下载地址指定了视频质量（视频清晰度）
-                                        fetch(streamQnJsonUrl)
-                                            .then(response => {
-                                                // 检查响应是否成功
-                                                if (!response.ok) {
-                                                    throw new Error('Network response was not ok!');
-                                                }
-                                                // 将响应转换为 JSON 格式
-                                                return response.json();
-                                            })
-                                            .then(data => {
-                                                Bilibili.durl = data.data.durl.concat([]);// 更新数据
-
-                                                // 视频的正在下载地址
-                                                let videoDownloadUrl = data.data.durl[0].url;
-
-                                                // referer鉴权
-                                                let refererHeader = window.location.href;
-
-                                                // 下载视频
-                                                downloadVideo(videoDownloadUrl, refererHeader);
-                                            })
-                                            .catch(error => {
-                                                // 处理错误
-                                                ERROR.ERROR_MAIN = 'Request error!' + error;
-                                                ERROR.CLOG_ERROR_INFO();
-
-                                                ERROR_DIALOG.fire({
-                                                    html: "可恶！出现什么问题了呢？<br>" + error
-                                                }).then((clickResult) => {
-                                                    if (clickResult.isConfirmed) {
-                                                        window.open(baseInfo.githubIssuesLink);
-                                                    }
-                                                });
-                                            });
-
-                                    } else {// 未能获取视频质量编码
-                                        ERROR.ERROR_MAIN = "Failed to obtain the video quality encoding(accept_quality).";
-                                        ERROR.CLOG_ERROR_INFO();
-
-                                        ERROR_DIALOG.fire({
-                                            text: "未能获取视频质量编码(accept_quality)，请重新尝试！"
-                                        }).then((clickResult) => {
-                                            if (clickResult.isConfirmed) {
-                                                window.open(baseInfo.githubIssuesLink);
-                                            }
-                                        });
-
-                                        return;
-                                    }
-                                }
-                            })
-                            .catch(error => {
-                                // 处理错误
-                                ERROR.ERROR_MAIN = 'Request error!' + error;
-                                ERROR.CLOG_ERROR_INFO();
-
-                                ERROR_DIALOG.fire({
-                                    html: "哎呀~怎么被绊倒了呢？<br>" + error
-                                }).then((clickResult) => {
-                                    if (clickResult.isConfirmed) {
-                                        window.open(baseInfo.githubIssuesLink);
-                                    }
-                                });
-                            });
-
-                    } else {    // 未能获取视频分页标识
-                        ERROR.ERROR_MAIN = "Failed to obtain the video pagination identifier(CID).";
-                        ERROR.CLOG_ERROR_INFO();
-
-                        ERROR_DIALOG.fire({
-                            text: "未能获取视频分页标识(CID)，请重新尝试！"
-                        }).then((clickResult) => {
-                            if (clickResult.isConfirmed) {
-                                window.open(baseInfo.githubIssuesLink);
-                            }
-                        });
-
-                        return;
-                    }
-                }
             })
             .catch(error => {
                 // 处理错误
@@ -456,6 +311,161 @@
                     }
                 });
             });
+
+        function getVideoPageCid(videoPageCid) {
+            if (!videoPageCid) {// 未能获取视频分页标识
+                ERROR.ERROR_MAIN = "Failed to obtain the video pagination identifier(CID).";
+                ERROR.CLOG_ERROR_INFO();
+
+                ERROR_DIALOG.fire({
+                    text: "未能获取视频分页标识(CID)，请重新尝试！"
+                }).then((clickResult) => {
+                    if (clickResult.isConfirmed) {
+                        window.open(baseInfo.githubIssuesLink);
+                    }
+                });
+
+                return;
+            }
+
+            // 通过视频标识组成“视频流（videoStream）”的请求连接 streamJsonUrl
+            // 这个 streamJsonUrl 并未指定请求的视频质量（视频清晰度）
+            // 即使用默认视频质量
+            let streamJsonUrl = '';
+            if (Bilibili.bvid) {
+                streamJsonUrl = Bilibili.API.videoStream + "?bvid=" + Bilibili.bvid + "&cid=" + videoPageCid + "&fourk=1&fnval=1";  // 默认下载 MP4
+            } else if (Bilibili.aid) {
+                streamJsonUrl = Bilibili.API.videoStream + "?aid=" + Bilibili.aid + "&cid=" + videoPageCid + "&fourk=1&fnval=1";    // 默认下载 MP4
+            } else {    // 未能正确获取视频唯一标识
+                ERROR.ERROR_MAIN = "Failed to obtain the unique identifier of the video (AV or BV).";
+                ERROR.CLOG_ERROR_INFO();
+
+                ERROR_DIALOG.fire({
+                    text: "未能正确获取视频唯一标识(AV or BV)，请重新尝试！"
+                }).then((clickResult) => {
+                    if (clickResult.isConfirmed) {
+                        window.open(baseInfo.githubIssuesLink);
+                    }
+                });
+
+                return;
+            }
+
+            // 使用 fetch 发起 GET 请求，获取“视频流”的 json 数据
+            // 这里请求的“视频流”下载地址是默认视频质量（视频清晰度）
+            fetch(streamJsonUrl)
+                .then(response => {
+                    // 检查响应是否成功
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok!');
+                    }
+                    // 将响应转换为 JSON 格式
+                    return response.json();
+                })
+                .then(async data => {
+                    // 解析视频清晰度数据
+                    Bilibili.durl = data.data.durl.concat([]);// 保存默认数据
+
+                    const videoPageQualitySelectList = new Map();
+                    for (let i = 0; i < data.data.accept_quality.length; i++) {
+                        videoPageQualitySelectList.set(data.data.accept_quality[i], data.data.accept_description[i]);
+                    }
+
+                    // 选择需要下载的清晰度
+                    const { value: videoPageQuality, isConfirmed: isConfirmedToContinue } = await Swal.fire({
+                        title: "选择需要下载的清晰度",
+                        html: "<strong>提示：</strong>视频网站的 1080P 有时候并非真实的 1080P，<br>" +
+                            "而是通过技术手段处理后的播放效果。<br>" +
+                            "这里是直接请求 B 站自己提供的清晰度分类信息，<br>" +
+                            "所以按照最高画质下载即可。",
+                        input: "select",
+                        inputOptions: videoPageQualitySelectList,
+                        showConfirmButton: true,
+                        confirmButtonText: "下载",
+                        showCancelButton: true,
+                        cancelButtonText: "取消",
+                        allowOutsideClick: false,
+                        footer: '<a href="' + baseInfo.githubIssuesLink + '" target="_blank">遇到了问题？请在这里告诉我们！</a>'
+                    });
+
+                    // 只有选择后再进行下一步
+                    if (!isConfirmedToContinue) { return; }
+
+                    // 请求对应视频的视频质量信息
+                    getVideoPageQuality(videoPageQuality, streamJsonUrl);
+
+                })
+                .catch(error => {
+                    // 处理错误
+                    ERROR.ERROR_MAIN = 'Request error!' + error;
+                    ERROR.CLOG_ERROR_INFO();
+
+                    ERROR_DIALOG.fire({
+                        html: "哎呀~怎么被绊倒了呢？<br>" + error
+                    }).then((clickResult) => {
+                        if (clickResult.isConfirmed) {
+                            window.open(baseInfo.githubIssuesLink);
+                        }
+                    });
+                });
+        }
+
+        function getVideoPageQuality(videoPageQuality, streamJsonUrl) {
+            if (!videoPageQuality) {// 未能获取视频质量编码
+
+                ERROR.ERROR_MAIN = "Failed to obtain the video quality encoding(accept_quality).";
+                ERROR.CLOG_ERROR_INFO();
+
+                ERROR_DIALOG.fire({
+                    text: "未能获取视频质量编码(accept_quality)，请重新尝试！"
+                }).then((clickResult) => {
+                    if (clickResult.isConfirmed) {
+                        window.open(baseInfo.githubIssuesLink);
+                    }
+                });
+
+                return;
+            }
+
+            let streamQnJsonUrl = streamJsonUrl + "&qn=" + videoPageQuality
+
+            // 使用 fetch 发起 GET 请求，获取“视频流”的 json 数据
+            // 这里请求的“视频流”下载地址指定了视频质量（视频清晰度）
+            fetch(streamQnJsonUrl)
+                .then(response => {
+                    // 检查响应是否成功
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok!');
+                    }
+                    // 将响应转换为 JSON 格式
+                    return response.json();
+                })
+                .then(data => {
+                    Bilibili.durl = data.data.durl.concat([]);// 更新数据
+
+                    // 视频的正在下载地址
+                    let videoDownloadUrl = data.data.durl[0].url;
+
+                    // referer鉴权
+                    let refererHeader = window.location.href;
+
+                    // 下载视频
+                    downloadVideo(videoDownloadUrl, refererHeader);
+                })
+                .catch(error => {
+                    // 处理错误
+                    ERROR.ERROR_MAIN = 'Request error!' + error;
+                    ERROR.CLOG_ERROR_INFO();
+
+                    ERROR_DIALOG.fire({
+                        html: "可恶！出现什么问题了呢？<br>" + error
+                    }).then((clickResult) => {
+                        if (clickResult.isConfirmed) {
+                            window.open(baseInfo.githubIssuesLink);
+                        }
+                    });
+                });
+        }
 
         function downloadVideo(videoDownloadUrl, refererHeader) {
 
