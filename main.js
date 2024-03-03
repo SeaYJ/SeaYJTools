@@ -14,6 +14,7 @@
         scriptName: 'SeaYJ Tools',
         author: 'SeaYJ',
         blogLink: 'https://www.seayj.cn',
+        logoLink: 'https://seayj.cn/medias/logo.png',
         githubLink: 'https://github.com/SeaYJ/SeaYJTools',
         githubIssuesLink: 'https://github.com/SeaYJ/SeaYJTools/issues',
     };
@@ -48,10 +49,11 @@
     });
 
 
-    //////
-    /// B站相关的扩展功能实现
-    /// - B站扩展模块按钮（封面下载按钮、视屏下载按钮）
-    //////
+    ///////////////////////////////////////////////////////////
+    /////                                                 /////
+    ///               B站相关的扩展功能实现                   ///
+    //////                                                /////
+    ///////////////////////////////////////////////////////////
     let Bilibili = {
         videoExtensionModuleBtnContainer: "#arc_toolbar_report>div.video-toolbar-left>div.video-toolbar-left-main",
         videoCoverItemSvg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 1024" class="video-coin-icon video-toolbar-item-icon" width="28" height="28"><path fill-rule="evenodd" clip-rule="evenodd" d="M767.4 127.8h-512c-33.9 0-66.5 13.5-90.5 37.5s-37.5 56.6-37.5 90.5V719c40.2-72.1 116.3-119.2 202-119.2 40.4 0 78.4 10.4 111.5 28.6 42-94.6 134.8-156.6 240.5-156.6 85.8 0 164.8 41.1 214 109.4V255.8c0-33.9-13.5-66.5-37.5-90.5s-56.5-37.5-90.5-37.5z m-96 304c-61.7 0-112-50.3-112-112s50.3-112 112-112 112 50.3 112 112-50.2 112-112 112z m0 0" fill="currentColor"></path><path d="M872.7 635.4c-37.2-71.2-111-115.8-191.3-115.6-89.7 0-167.9 54.6-200.3 136.9 51 43.9 80.3 107.9 80.3 175.1-0.2 21.7-3.3 43.2-9.4 64h215.4c33.9 0 66.5-13.5 90.5-37.5s37.5-56.6 37.5-90.5V648.1c-9.4 0.6-18.3-4.4-22.7-12.7z m0 0M329.4 647.8c-84.1-0.1-157.6 56.9-178.4 138.5-2.3 8.7-9.2 15.3-18 17.2 15.5 53.2 64.1 92.3 122.3 92.3h248.3c0-2.5 0-4.9 0.8-7.4 18-56 8.2-117.2-26.4-164.8-34.5-47.5-89.8-75.7-148.6-75.8z m0 0" fill="currentColor"></path></svg>',
@@ -76,7 +78,7 @@
             '人生就像一部电影，哭过、笑过、留下遗憾，但最后一定要精彩收场。',
             '生活不是等待风暴过去，而是学会在雨中翩翩起舞。'
         ],
-        API: {
+        API: {                                          // B 站的 API
             videoInfo: "https://api.bilibili.com/x/web-interface/view",
             videoStream: "https://api.bilibili.com/x/player/playurl"
         },
@@ -95,6 +97,8 @@
         return Math.floor(Math.random(seed) * (max - min) + min);
     }
 
+    // 从地址栏的 url 正则匹配出视频唯一标识，即 BV 号或 AV 号，
+    // 并将其存储在对象 Bilibili 中
     Bilibili.getVideoIdentifier = function () {
         // 获取视频网络相对路径
         let path = window.location.pathname;
@@ -123,6 +127,7 @@
         Bilibili.bvid = videoIdentifier;                        // 记录 bv 号
     }
 
+    // 当点击“下载封面”按钮后的执行逻辑
     Bilibili.videoCoverDownload = function () {
 
         // 重获取当前视频标识(AV or BV)
@@ -172,7 +177,7 @@
                     footer: '<a href="' + baseInfo.githubIssuesLink + '" target="_blank">遇到了问题？请在这里告诉我们！</a>'
                 }).then((clickResult) => {
                     if (clickResult.isConfirmed) {
-                        downloadVideoCover(infoJsonUrl, data);
+                        downloadVideoCover(data.data, data);
                     }
                 });
             })
@@ -191,49 +196,73 @@
             });
 
 
-        function downloadVideoCover(url, jsonData) {
-            // 通过 Fetch API 创建 Blob 对象下载图片
-            fetch(url)
-                .then(response => { // 检查网络问题
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok.');
-                    }
-                    return response.blob();
-                })
-                .then(blob => {     // 下载图片
-                    const url = window.URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;                // 设置<a>元素的 href 属性为 Blob URL
-                    // 生成文件扩展名
-                    // 使用 || [] 确保 match 方法未找到匹配时返回一个空数组，避免 match 返回 null 导致的错误。
-                    // 使用 [0] 获取数组的第一个元素，如果 match 方法未找到匹配，则返回 undefined。
-                    // 最后使用 || ".jpg" 设置默认值，确保即使 match 方法未找到匹配，也能得到默认的后缀名。
-                    let fileExt = (jsonData.data.pic.match(/\.(png|pjp|jpg|pjpeg|jfif)\b/gi) || [])[0] || ".jpg";
-                    // 生成文件唯一标识（时间戳）
-                    let fileUniqueIdentifier = new Date().getTime();
-                    link.download = baseInfo.scriptName + '_' + fileUniqueIdentifier + fileExt;    // 设置<a>元素的 download 属性为要保存的文件名
-                    link.click();                   // 模拟点击<a>元素来触发下载
-                    window.URL.revokeObjectURL(url);// 释放 Blob URL 对象
+        function downloadVideoCover(imgUrl, jsonRootData) {
 
-                    SUCCESS_DIALOG.fire({           // 提示下载成功
-                        title: "已保存"
-                    });
-                })
-                .catch(error => {
-                    ERROR.ERROR_MAIN = 'Download cover failed:' + error;
-                    ERROR.CLOG_ERROR_INFO();
+            // 创建一个Image对象
+            var img = new Image();
+            img.crossOrigin = "Anonymous"; // 允许加载跨域图片
 
-                    ERROR_DIALOG.fire({
-                        html: "[<strong>下载失败</strong>]好像发生了点小问题，请重新尝试！<br>" + error
-                    }).then((clickResult) => {
-                        if (clickResult.isConfirmed) {
-                            window.open(baseInfo.githubIssuesLink);
-                        }
-                    });
+            // 图片加载完成后执行的回调函数
+            img.onload = function () {
+                // 创建一个Canvas元素
+                var canvas = document.createElement('canvas');
+                var ctx = canvas.getContext('2d');
+
+                // 设置Canvas的尺寸与图片一致
+                canvas.width = img.width;
+                canvas.height = img.height;
+
+                // 在Canvas上绘制图片
+                ctx.drawImage(img, 0, 0, img.width, img.height);
+
+                // 创建一个虚拟的链接元素
+                var link = document.createElement('a');
+
+                // 将Canvas上的内容转换为DataURL
+                link.href = canvas.toDataURL('image/png');
+
+                // 设置下载的文件名
+                // 生成文件扩展名
+                // 使用 || [] 确保 match 方法未找到匹配时返回一个空数组，避免 match 返回 null 导致的错误。
+                // 使用 [0] 获取数组的第一个元素，如果 match 方法未找到匹配，则返回 undefined。
+                // 最后使用 || ".jpg" 设置默认值，确保即使 match 方法未找到匹配，也能得到默认的后缀名。
+                let fileExt = (jsonRootData.data.pic.match(/\.(png|pjp|jpg|pjpeg|jfif)\b/gi) || [])[0] || ".jpg";
+                // 生成文件唯一标识（时间戳）
+                let fileUniqueIdentifier = new Date().getTime();
+                link.download = baseInfo.scriptName + '_' + fileUniqueIdentifier + fileExt;
+
+                // 模拟点击虚拟链接元素，触发下载
+                link.click();
+
+                // 提示下载成功
+                SUCCESS_DIALOG.fire({
+                    title: "已保存"
                 });
+            };
+
+            // 注意这里异常处理略有不同，需要使用：
+            // 图片加载失败时执行的回调函数
+            img.onerror = function () {
+                let error = 'Image loading failed.';
+
+                ERROR.ERROR_MAIN = 'Download cover failed:' + error;
+                ERROR.CLOG_ERROR_INFO();
+
+                ERROR_DIALOG.fire({
+                    html: "[<strong>下载失败</strong>]好像发生了点小问题，请重新尝试！<br>" + error
+                }).then((clickResult) => {
+                    if (clickResult.isConfirmed) {
+                        window.open(baseInfo.githubIssuesLink);
+                    }
+                });
+            };
+
+            // 设置图片源
+            img.src = imgUrl;
         }
     }
 
+    // 当点击“下载视频”按钮后的执行逻辑
     Bilibili.videoDownload = function () {
         // 重获取当前视频标识(AV or BV)
         Bilibili.getVideoIdentifier();
@@ -280,7 +309,11 @@
                 // 弹出一个带有选择框的 SweetAlert2 弹窗，并将用户选择的值保存在变量 videoPageCid 中
                 // 选择需要下载的视频
                 const { value: videoPageCid, isConfirmed: isConfirmedToContinue } = await Swal.fire({
+                    imageUrl: baseInfo.logoLink,    // 解析 JSON 数据，获取封面链接
+                    imageAlt: "SeaYJ Logo",
+                    imageHeight: 128,
                     title: "选择需要下载的视频",
+                    html: "<strong>提示：</strong>只读取 B 站视频默认分 P 列表。",
                     input: "select",
                     inputOptions: videoSelectList,
                     showConfirmButton: true,
@@ -374,10 +407,11 @@
                     // 选择需要下载的清晰度
                     const { value: videoPageQuality, isConfirmed: isConfirmedToContinue } = await Swal.fire({
                         title: "选择需要下载的清晰度",
-                        html: "<strong>提示：</strong>视频网站的 1080P 有时候并非真实的 1080P，<br>" +
-                            "而是通过技术手段处理后的播放效果。<br>" +
-                            "这里是直接请求 B 站自己提供的清晰度分类信息，<br>" +
-                            "所以按照最高画质下载即可。",
+                        html: "<strong>提示：</strong>这里仅提供 MP4 的下载方式，<br>" +
+                            "资源均由 B 站官方提供。<u>如果需要更高画质</u>，<br>" +
+                            "<u>请使用 DASH 的方式进行下载</u>！<br><br>" +
+                            "<strong>Tips：</strong>DASH 方式是视频与音频分离的，<br>" +
+                            "需要自行合并！",
                         input: "select",
                         inputOptions: videoPageQualitySelectList,
                         showConfirmButton: true,
@@ -557,6 +591,7 @@
         }
     }
 
+    // 在视频播放页面添加扩展功能的按钮
     Bilibili.addVideoExtensionModuleBtn = function () {
         let replyBoxTextarea = document.querySelector(".reply-box-textarea");
         let commentSubmit = document.querySelector(".comment-submit");
@@ -645,6 +680,8 @@
     }
 
     Bilibili.addVideoExtensionModuleBtn(); // 初始调用
+
+
 
     // alert('脚本运行完毕！');
 });
