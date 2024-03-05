@@ -177,7 +177,7 @@
                     footer: '<a href="' + baseInfo.githubIssuesLink + '" target="_blank">遇到了问题？请在这里告诉我们！</a>'
                 }).then((clickResult) => {
                     if (clickResult.isConfirmed) {
-                        downloadVideoCover(data.data, data);
+                        downloadVideoCover(data.data.pic, data);
                     }
                 });
             })
@@ -260,6 +260,7 @@
             // 设置图片源
             img.src = imgUrl;
         }
+
     }
 
     // 当点击“下载视频”按钮后的执行逻辑
